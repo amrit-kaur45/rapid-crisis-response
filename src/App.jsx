@@ -2,7 +2,7 @@ import { useState } from "react";
 import Navbar from "./components/Navbar";
 import Sidebar from "./components/Sidebar";
 import CommandCenter from "./pages/CommandCenter";
-import SOSReport from "./pages/SOSReport";
+import SOSReport from "./pages/SOSReport.jsx";
 import IncidentMap from "./pages/IncidentMap";
 import { StaffDispatch, Broadcast, IncidentLog, GuestSOS } from "./pages/index.js";
 
