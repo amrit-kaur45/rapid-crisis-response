@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from "react";
-import { MAPS_KEY } from "../services/firebase";
 import { MOCK_INCIDENTS } from "../services/incidents";
 
 const SEV_COLOR = { CRITICAL: "#FF3B3B", HIGH: "#FF8C00", MEDIUM: "#FFB800", LOW: "#00D084" };
@@ -14,16 +13,10 @@ export default function IncidentMap() {
   const [mapsLoaded, setMapsLoaded] = useState(false);
   const [error, setError] = useState(false);
 
-  useEffect(() => {
-    if (MAPS_KEY === "YOUR_MAPS_API_KEY") { setError(true); return; }
-    const script = document.createElement("script");
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${MAPS_KEY}&callback=initMap`;
-    script.async = true;
-    window.initMap = () => setMapsLoaded(true);
-    script.onerror = () => setError(true);
-    document.head.appendChild(script);
-    return () => { delete window.initMap; };
-  }, []);
+useEffect(() => {
+  setError(true); // Always use the SVG fallback floor plan
+}, []);
+
 
   useEffect(() => {
     if (!mapsLoaded || !mapRef.current) return;

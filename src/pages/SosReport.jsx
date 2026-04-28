@@ -1,176 +1,240 @@
-import { useState, useEffect } from "react";
-import { MOCK_INCIDENTS, MOCK_STAFF, MOCK_STATS, subscribeIncidents } from "../services/incidents";
-import { summarizeIncidents } from "../services/gemini";
+import { useState } from "react";
+import { triageIncident } from "../services/gemini";
+import { reportIncident } from "../services/incidents";
+import { translateToAll } from "../services/translate";
 
+const TYPES = ["Fire", "Medical", "Security", "Flood", "Structural", "Evacuation", "Other"];
+const LOCATIONS = ["Lobby", "Restaurant", "Pool Area", "Floor 1", "Floor 2", "Floor 3", "Parking", "Kitchen", "Gym", "Spa", "Rooftop", "Other"];
 const SEV_COLOR = { CRITICAL: "#FF3B3B", HIGH: "#FF8C00", MEDIUM: "#FFB800", LOW: "#00D084" };
-const SEV_BG    = { CRITICAL: "#FF3B3B18", HIGH: "#FF8C0018", MEDIUM: "#FFB80018", LOW: "#00D08418" };
-const STATUS_COLOR = { ACTIVE: "#FF3B3B", RESPONDING: "#FFB800", MONITORING: "#3B82F6", RESOLVED: "#00D084" };
 
-function StatCard({ icon, label, value, sub, color }) {
-  return (
-    <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 12, padding: "16px 20px" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-        <div>
-          <div style={{ color: "var(--text3)", fontSize: 11, fontWeight: 600, marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.06em" }}>{label}</div>
-          <div style={{ color: color || "var(--text)", fontSize: 28, fontWeight: 800 }}>{value}</div>
-          {sub && <div style={{ color: "var(--text3)", fontSize: 12, marginTop: 4 }}>{sub}</div>}
-        </div>
-        <span style={{ fontSize: 22 }}>{icon}</span>
-      </div>
+export default function SOSReport({ navigate }) {
+  const [form, setForm] = useState({ type: "", location: "", room: "", description: "", reporter: "" });
+  const [triage, setTriage] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [submitted, setSubmitted] = useState(false);
+  const [translations, setTranslations] = useState(null);
+  const [translating, setTranslating] = useState(false);
+
+  const handleTriage = async () => {
+  if (!form.description || !form.location) return;
+
+  try {
+    setLoading(true);
+
+    const report = `${form.type || "General"} incident at ${form.location}${
+      form.room ? ` Room ${form.room}` : ""
+    }. ${form.description}`;
+
+    const result = await triageIncident(report);
+
+    console.log("TRIAGE RESULT:", result); // 👈 debug
+
+    if (!result) throw new Error("No response from AI");
+
+    setTriage(result);
+
+  } catch (err) {
+    console.error("Triage failed:", err);
+    alert("AI failed. Check API / Gemini connection.");
+  } finally {
+    setLoading(false);
+  }
+};
+
+const handleSubmit = async () => {
+  if (!triage) {
+    alert("No triage data");
+    return;
+  }
+
+  console.log("CLICK WORKING"); // 👈 must print
+
+  setLoading(true);
+
+  try {
+    // 🔥 skip Firebase completely (test mode)
+    await new Promise((resolve) => setTimeout(resolve, 800));
+
+    console.log("SUBMIT DONE"); // 👈 must print
+
+    setSubmitted(true); // 👈 THIS SHOULD SWITCH SCREEN
+
+  } catch (err) {
+    console.error(err);
+    alert("Something failed");
+  }
+
+  setLoading(false);
+};
+
+
+const handleTranslate = async () => {
+  if (!triage?.broadcast_message) return;
+
+  try {
+    setTranslating(true);
+
+    const result = await translateToAll(triage.broadcast_message);
+
+    setTranslations(result);
+
+  } catch (err) {
+    console.error("Translate failed:", err);
+    alert("Translation failed");
+  } finally {
+    setTranslating(false);
+  }
+};
+
+  if (submitted) return (
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "80vh", textAlign: "center", padding: 32 }}>
+      <div style={{ fontSize: 56, marginBottom: 16 }}>✅</div>
+      <h2 style={{ color: "var(--text)", fontSize: 24, fontWeight: 700, marginBottom: 8 }}>Incident Reported</h2>
+      <p style={{ color: "var(--text2)", marginBottom: 8 }}>Severity: <span style={{ color: SEV_COLOR[triage.severity], fontWeight: 700 }}>{triage.severity}</span></p>
+      <p style={{ color: "var(--text2)", marginBottom: 24 }}>Responders have been alerted. {triage.escalate_911 && "911 has been notified."}</p>
+      <button onClick={() => { setSubmitted(false); setTriage(null); setForm({ type: "", location: "", room: "", description: "", reporter: "" }); }}
+        style={{ background: "var(--accent)", color: "#fff", border: "none", borderRadius: 9, padding: "11px 28px", cursor: "pointer", fontSize: 14, fontWeight: 700 }}>
+        Report Another
+      </button>
     </div>
   );
-}
-
-export default function CommandCenter({ navigate }) {
-  const [incidents, setIncidents] = useState(MOCK_INCIDENTS);
-  const [staff] = useState(MOCK_STAFF);
-  const [aiSummary, setAiSummary] = useState("");
-  const [summaryLoading, setSummaryLoading] = useState(false);
-
-  useEffect(() => {
-    const unsub = subscribeIncidents(setIncidents);
-    return () => typeof unsub === "function" && unsub();
-  }, []);
-
-  const fetchSummary = async () => {
-    setSummaryLoading(true);
-    const active = incidents.filter(i => i.status !== "RESOLVED");
-    const summary = await summarizeIncidents(active.map(i => ({ severity: i.severity, type: i.type, location: i.location, description: i.description })));
-    setAiSummary(summary);
-    setSummaryLoading(false);
-  };
-
-  const active = incidents.filter(i => i.status === "ACTIVE");
-  const responding = incidents.filter(i => i.status === "RESPONDING");
 
   return (
-    <div style={{ padding: 24, maxWidth: 1200, margin: "0 auto" }}>
-      {/* Stats */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(6,1fr)", gap: 12, marginBottom: 24 }}>
-        <StatCard icon="🚨" label="Active" value={active.length} color="#FF3B3B" />
-        <StatCard icon="🚁" label="Responding" value={responding.length} color="#FFB800" />
-        <StatCard icon="✅" label="Resolved Today" value={MOCK_STATS.resolved_today} color="#00D084" />
-        <StatCard icon="⏱" label="Avg Response" value={MOCK_STATS.avg_response_time} />
-        <StatCard icon="👥" label="Staff Deployed" value={MOCK_STATS.staff_deployed} />
-        <StatCard icon="🏨" label="Guests Affected" value={MOCK_STATS.guests_affected} color="#FFB800" />
-      </div>
+    <div style={{ padding: 24, maxWidth: 860, margin: "0 auto" }}>
+      <h1 style={{ fontSize: 22, fontWeight: 800, marginBottom: 4 }}>🚨 Report Incident</h1>
+      <p style={{ color: "var(--text2)", fontSize: 14, marginBottom: 24 }}>Gemini AI will instantly triage and dispatch the right responders</p>
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 320px", gap: 20 }}>
-        {/* Left */}
-        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-
-          {/* Gemini AI Summary */}
-          <div style={{ background: "var(--surface)", border: "1px solid #1A3A70", borderRadius: 12, padding: 18 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <img src="https://www.gstatic.com/lamda/images/gemini_sparkle_v002_d4735304ff6292a690345.svg" width={18} height={18} alt="Gemini" onError={e => e.target.style.display = "none"} />
-                <span style={{ color: "#4285F4", fontSize: 13, fontWeight: 700 }}>Gemini AI Situation Summary</span>
-              </div>
-              <button onClick={fetchSummary} disabled={summaryLoading}
-                style={{ background: "#1A73E822", color: "#4285F4", border: "1px solid #1A73E844", borderRadius: 7, padding: "5px 14px", cursor: "pointer", fontSize: 12, fontWeight: 600 }}>
-                {summaryLoading ? "Analyzing..." : "↻ Refresh"}
-              </button>
-            </div>
-            {summaryLoading && <div style={{ color: "var(--text3)", fontSize: 13 }}>Gemini is analyzing all active incidents...</div>}
-            {!summaryLoading && aiSummary && <div style={{ color: "var(--text2)", fontSize: 14, lineHeight: 1.7 }}>{aiSummary}</div>}
-            {!summaryLoading && !aiSummary && (
-              <div style={{ color: "var(--text3)", fontSize: 13 }}>Click Refresh to get an AI-generated situational summary from Gemini.</div>
-            )}
-          </div>
-
-          {/* Active Incidents */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 }}>
+        {/* Form */}
+        <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 14, padding: 22, display: "flex", flexDirection: "column", gap: 14 }}>
           <div>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-              <h2 style={{ fontSize: 15, fontWeight: 700, color: "var(--text)" }}>Active Incidents</h2>
-              <button onClick={() => navigate("sos")} style={{ background: "#FF3B3B", color: "#fff", border: "none", borderRadius: 7, padding: "7px 16px", cursor: "pointer", fontSize: 12, fontWeight: 700 }}>
-                + Report New
-              </button>
+            <label style={{ color: "var(--text3)", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", display: "block", marginBottom: 6 }}>Incident Type</label>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+              {TYPES.map(t => (
+                <button key={t} onClick={() => setForm(p => ({ ...p, type: t }))}
+                  style={{ background: form.type === t ? "var(--accent)" : "var(--surface2)", color: form.type === t ? "#fff" : "var(--text2)", border: `1px solid ${form.type === t ? "var(--accent)" : "var(--border)"}`, borderRadius: 7, padding: "6px 12px", cursor: "pointer", fontSize: 12, fontWeight: 600 }}>
+                  {t}
+                </button>
+              ))}
             </div>
-
-            {incidents.map(inc => (
-              <div key={inc.id} className="animate-slide" style={{
-                background: "var(--surface)", border: `1px solid ${SEV_COLOR[inc.severity]}44`,
-                borderLeft: `3px solid ${SEV_COLOR[inc.severity]}`,
-                borderRadius: 10, padding: "14px 18px", marginBottom: 10,
-                boxShadow: inc.severity === "CRITICAL" ? `0 0 20px ${SEV_COLOR[inc.severity]}18` : "none",
-              }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 6 }}>
-                      <span style={{ background: SEV_BG[inc.severity], color: SEV_COLOR[inc.severity], borderRadius: 5, padding: "2px 9px", fontSize: 10, fontWeight: 800 }}>
-                        {inc.severity === "CRITICAL" && <span style={{ animation: "blink 1s infinite", display: "inline-block", marginRight: 4 }}>●</span>}
-                        {inc.severity}
-                      </span>
-                      <span style={{ color: "var(--text2)", fontSize: 13, fontWeight: 600 }}>{inc.type}</span>
-                      <span style={{ color: "var(--text3)", fontSize: 12 }}>· {inc.location}</span>
-                    </div>
-                    <div style={{ color: "var(--text)", fontSize: 14, marginBottom: 8 }}>{inc.description}</div>
-                    <div style={{ display: "flex", gap: 12, fontSize: 12, color: "var(--text3)" }}>
-                      <span>👤 {inc.reported_by}</span>
-                      <span>🕐 {Math.round((Date.now() - inc.timestamp) / 60000)}m ago</span>
-                      {inc.escalate_911 && <span style={{ color: "#FF3B3B", fontWeight: 700 }}>🚔 911 ESCALATED</span>}
-                    </div>
-                  </div>
-                  <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 8 }}>
-                    <span style={{ background: STATUS_COLOR[inc.status] + "22", color: STATUS_COLOR[inc.status], borderRadius: 6, padding: "3px 10px", fontSize: 11, fontWeight: 700 }}>
-                      {inc.status}
-                    </span>
-                    <div style={{ display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "flex-end", maxWidth: 160 }}>
-                      {inc.responders?.map(r => (
-                        <span key={r} style={{ background: "var(--surface2)", color: "var(--text2)", borderRadius: 5, padding: "2px 7px", fontSize: 11 }}>{r}</span>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-                {inc.triage?.immediate_actions?.length > 0 && (
-                  <div style={{ marginTop: 10, paddingTop: 10, borderTop: "1px solid var(--border)", display: "flex", gap: 8, flexWrap: "wrap" }}>
-                    {inc.triage.immediate_actions.map((a, i) => (
-                      <span key={i} style={{ color: "var(--text3)", fontSize: 12 }}>→ {a}</span>
-                    ))}
-                  </div>
-                )}
-              </div>
-            ))}
           </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+            <div>
+              <label style={{ color: "var(--text3)", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", display: "block", marginBottom: 6 }}>Location</label>
+              <select value={form.location} onChange={e => setForm(p => ({ ...p, location: e.target.value }))}
+                style={{ width: "100%", background: "var(--bg2)", border: "1px solid var(--border)", borderRadius: 8, padding: "9px 12px", color: "var(--text)", fontSize: 13, outline: "none" }}>
+                <option value="">Select...</option>
+                {LOCATIONS.map(l => <option key={l}>{l}</option>)}
+              </select>
+            </div>
+            <div>
+              <label style={{ color: "var(--text3)", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", display: "block", marginBottom: 6 }}>Room / Zone</label>
+              <input value={form.room} onChange={e => setForm(p => ({ ...p, room: e.target.value }))} placeholder="e.g. 204"
+                style={{ width: "100%", background: "var(--bg2)", border: "1px solid var(--border)", borderRadius: 8, padding: "9px 12px", color: "var(--text)", fontSize: 13, outline: "none" }} />
+            </div>
+          </div>
+
+          <div>
+            <label style={{ color: "var(--text3)", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", display: "block", marginBottom: 6 }}>Description *</label>
+            <textarea value={form.description} onChange={e => setForm(p => ({ ...p, description: e.target.value }))}
+              placeholder="Describe what you see — be specific. E.g: Smoke coming from kitchen fryer, fire alarm triggered, 3 guests present..."
+              rows={4}
+              style={{ width: "100%", background: "var(--bg2)", border: "1px solid var(--border)", borderRadius: 8, padding: "10px 12px", color: "var(--text)", fontSize: 13, outline: "none", resize: "vertical", fontFamily: "var(--font)" }} />
+          </div>
+
+          <div>
+            <label style={{ color: "var(--text3)", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", display: "block", marginBottom: 6 }}>Your Name / ID</label>
+            <input value={form.reporter} onChange={e => setForm(p => ({ ...p, reporter: e.target.value }))} placeholder="Staff name or ID"
+              style={{ width: "100%", background: "var(--bg2)", border: "1px solid var(--border)", borderRadius: 8, padding: "9px 12px", color: "var(--text)", fontSize: 13, outline: "none" }} />
+          </div>
+
+          <button onClick={handleTriage} disabled={!form.description || !form.location || loading}
+            style={{ background: form.description && form.location ? "#1A73E8" : "var(--surface2)", color: "#fff", border: "none", borderRadius: 9, padding: "12px 0", cursor: "pointer", fontSize: 14, fontWeight: 700, transition: "all .2s" }}>
+            {loading ? "Gemini is triaging..." : "⚡ Analyse with Gemini AI"}
+          </button>
         </div>
 
-        {/* Right — Staff Panel */}
-        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-          <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 12, padding: 18 }}>
-            <h3 style={{ fontSize: 13, fontWeight: 700, marginBottom: 14 }}>Staff Status</h3>
-            {staff.map(s => (
-              <div key={s.id} style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
-                <div style={{ width: 34, height: 34, borderRadius: "50%", background: s.status === "ON_INCIDENT" ? "#FF3B3B22" : "#00D08422", border: `1.5px solid ${s.status === "ON_INCIDENT" ? "#FF3B3B" : "#00D084"}`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 700, color: s.status === "ON_INCIDENT" ? "#FF3B3B" : "#00D084", flexShrink: 0 }}>
-                  {s.avatar}
-                </div>
-                <div style={{ flex: 1 }}>
-                  <div style={{ color: "var(--text)", fontSize: 13, fontWeight: 600 }}>{s.name}</div>
-                  <div style={{ color: "var(--text3)", fontSize: 11 }}>{s.role} · {s.zone}</div>
-                </div>
-                <span style={{ fontSize: 10, fontWeight: 700, color: s.status === "ON_INCIDENT" ? "#FF3B3B" : "#00D084" }}>
-                  {s.status === "ON_INCIDENT" ? "BUSY" : "FREE"}
-                </span>
-              </div>
-            ))}
-          </div>
+        {/* Triage Result */}
+        <div>
+          {!triage && (
+            <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 14, padding: 24, height: "100%", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", textAlign: "center", color: "var(--text3)" }}>
+              <div style={{ fontSize: 36, marginBottom: 12 }}>🤖</div>
+              <div style={{ fontSize: 14 }}>Fill in the incident details and click Analyse — Gemini will triage severity, assign responders, and draft a guest broadcast.</div>
+            </div>
+          )}
 
-          {/* Quick Actions */}
-          <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 12, padding: 18 }}>
-            <h3 style={{ fontSize: 13, fontWeight: 700, marginBottom: 14 }}>Quick Actions</h3>
-            {[
-              { label: "📢 Send Broadcast", page: "broadcast", color: "#FFB800" },
-              { label: "🗺️ View Live Map", page: "map", color: "#4285F4" },
-              { label: "👥 Dispatch Staff", page: "dispatch", color: "#00D084" },
-              { label: "📋 Incident Log", page: "log", color: "var(--text2)" },
-            ].map(a => (
-              <button key={a.page} onClick={() => navigate(a.page)}
-                style={{ display: "block", width: "100%", background: "var(--surface2)", border: "1px solid var(--border)", borderRadius: 8, padding: "10px 14px", cursor: "pointer", color: a.color, fontSize: 13, fontWeight: 600, textAlign: "left", marginBottom: 8, transition: "all .15s" }}
-                onMouseEnter={e => e.currentTarget.style.borderColor = a.color}
-                onMouseLeave={e => e.currentTarget.style.borderColor = "var(--border)"}>
-                {a.label}
+          {triage && (
+            <div className="animate-slide" style={{ background: "var(--surface)", border: `1px solid ${SEV_COLOR[triage.severity]}44`, borderRadius: 14, padding: 22, display: "flex", flexDirection: "column", gap: 14 }}>
+              {/* Severity */}
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <div>
+                  <div style={{ color: "var(--text3)", fontSize: 11, marginBottom: 4 }}>GEMINI TRIAGE RESULT</div>
+                  <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+                    <span style={{ color: SEV_COLOR[triage.severity], fontSize: 22, fontWeight: 900 }}>{triage.severity}</span>
+                    <span style={{ color: "var(--text2)", fontSize: 14 }}>{triage.incident_type}</span>
+                  </div>
+                </div>
+                <div style={{ textAlign: "center" }}>
+                  <div style={{ fontSize: 28, fontWeight: 800, color: SEV_COLOR[triage.severity] }}>{triage.severity_score}/10</div>
+                  <div style={{ fontSize: 10, color: "var(--text3)" }}>Risk Score</div>
+                </div>
+              </div>
+
+              {/* Immediate Actions */}
+              <div style={{ background: "var(--bg2)", borderRadius: 9, padding: 14 }}>
+                <div style={{ color: "#FF8C00", fontSize: 12, fontWeight: 700, marginBottom: 8 }}>⚡ Immediate Actions</div>
+                {triage.immediate_actions?.map((a, i) => (
+                  <div key={i} style={{ color: "var(--text2)", fontSize: 13, marginBottom: 5 }}>→ {a}</div>
+                ))}
+              </div>
+
+              {/* Responders */}
+              <div>
+                <div style={{ color: "var(--text3)", fontSize: 11, marginBottom: 6 }}>RESPONDERS NEEDED</div>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                  {triage.responders_needed?.map(r => (
+                    <span key={r} style={{ background: "#1A73E822", color: "#4285F4", border: "1px solid #1A73E844", borderRadius: 6, padding: "3px 10px", fontSize: 12, fontWeight: 600 }}>{r}</span>
+                  ))}
+                </div>
+              </div>
+
+              {/* Broadcast */}
+              <div style={{ background: "#FFB80012", border: "1px solid #FFB80044", borderRadius: 9, padding: 12 }}>
+                <div style={{ color: "#FFB800", fontSize: 12, fontWeight: 700, marginBottom: 6 }}>📢 Guest Broadcast Draft</div>
+                <div style={{ color: "var(--text)", fontSize: 13, lineHeight: 1.6, fontStyle: "italic" }}>"{triage.broadcast_message}"</div>
+                <button onClick={handleTranslate} disabled={translating}
+                  style={{ marginTop: 10, background: "transparent", border: "1px solid #1A73E844", color: "#4285F4", borderRadius: 6, padding: "5px 12px", cursor: "pointer", fontSize: 11, fontWeight: 600 }}>
+                  {translating ? "Translating..." : "🌐 Translate to 10 languages"}
+                </button>
+              </div>
+
+              {/* Translations */}
+              {translations && (
+                <div style={{ background: "var(--bg2)", borderRadius: 9, padding: 12, maxHeight: 160, overflowY: "auto" }}>
+                  <div style={{ color: "var(--text3)", fontSize: 11, marginBottom: 8 }}>MULTILINGUAL BROADCAST</div>
+                  {Object.entries(translations).map(([code, text]) => (
+                    <div key={code} style={{ marginBottom: 6 }}>
+                      <span style={{ color: "#4285F4", fontSize: 11, fontWeight: 700, marginRight: 6 }}>{code.toUpperCase()}</span>
+                      <span style={{ color: "var(--text2)", fontSize: 12 }}>{text}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {triage.escalate_911 && (
+                <div style={{ background: "#FF3B3B18", border: "1px solid #FF3B3B44", borderRadius: 8, padding: 12, display: "flex", gap: 8, alignItems: "center" }}>
+                  <span style={{ fontSize: 18 }}>🚔</span>
+                  <span style={{ color: "#FF6B6B", fontSize: 13, fontWeight: 700 }}>Gemini recommends escalating to 911 immediately</span>
+                </div>
+              )}
+
+              <button onClick={handleSubmit} disabled={loading}
+                style={{ background: "#FF3B3B", color: "#fff", border: "none", borderRadius: 9, padding: "13px 0", cursor: "pointer", fontSize: 15, fontWeight: 800 }}>
+                {loading ? "Dispatching..." : "🚨 CONFIRM & DISPATCH"}
               </button>
-            ))}
-          </div>
+            </div>
+          )}
         </div>
       </div>
     </div>

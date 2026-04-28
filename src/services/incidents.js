@@ -97,9 +97,18 @@ export function subscribeIncidents(callback) {
 export async function reportIncident(incident) {
   try {
     const incRef = ref(db, "incidents");
-    await push(incRef, { ...incident, timestamp: serverTimestamp() });
-  } catch {
-    console.warn("Firebase not configured — incident saved locally only");
+
+    const res = await push(incRef, {
+      ...incident,
+      timestamp: Date.now(), // ✅ safer than serverTimestamp here
+    });
+
+    return res; // ✅ IMPORTANT
+
+  } catch (err) {
+    console.warn("Firebase not configured — fallback used", err);
+
+    return true; // ✅ prevent UI from hanging
   }
 }
 

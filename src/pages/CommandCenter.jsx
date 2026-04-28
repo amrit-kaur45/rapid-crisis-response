@@ -107,7 +107,13 @@ export default function CommandCenter({ navigate }) {
                     <div style={{ color: "var(--text)", fontSize: 14, marginBottom: 8 }}>{inc.description}</div>
                     <div style={{ display: "flex", gap: 12, fontSize: 12, color: "var(--text3)" }}>
                       <span>👤 {inc.reported_by}</span>
-                      <span>🕐 {Math.round((Date.now() - inc.timestamp) / 60000)}m ago</span>
+                      <span>
+  🕐 {
+    inc.timestamp
+      ? Math.round((Date.now() - Number(inc.timestamp)) / 60000)
+      : "just now"
+  }m ago
+</span>
                       {inc.escalate_911 && <span style={{ color: "#FF3B3B", fontWeight: 700 }}>🚔 911 ESCALATED</span>}
                     </div>
                   </div>

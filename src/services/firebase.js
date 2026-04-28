@@ -22,6 +22,3 @@ export { ref, onValue, push, set, serverTimestamp };
 
 // Google API Keys — set in .env as VITE_GEMINI_KEY, VITE_MAPS_KEY, VITE_TRANSLATE_KEY
 export const GEMINI_KEY   = import.meta.env.VITE_GEMINI_KEY   || "YOUR_GEMINI_API_KEY";
-export const MAPS_KEY     = import.meta.env.VITE_MAPS_KEY     || "YOUR_MAPS_API_KEY";
-export const TRANSLATE_KEY= import.meta.env.VITE_TRANSLATE_KEY|| "YOUR_TRANSLATE_API_KEY";
-export const TTS_KEY      = import.meta.env.VITE_TTS_KEY      || "YOUR_TTS_API_KEY";

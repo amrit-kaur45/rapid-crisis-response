@@ -14,17 +14,42 @@ export function StaffDispatch() {
   const [instructions, setInstructions] = useState({});
   const [loading, setLoading] = useState({});
 
-  const fetchInstructions = async (s) => {
-    const incId = assignments[s.id];
-    if (!incId) return;
-    const inc = incidents.find(i => i.id === incId);
-    if (!inc) return;
-    setLoading(p => ({ ...p, [s.id]: true }));
-    const result = await getRoleInstructions(s.role, { type: inc.type, severity: inc.severity, location: inc.location });
-    setInstructions(p => ({ ...p, [s.id]: result }));
-    setLoading(p => ({ ...p, [s.id]: false }));
-  };
+const fetchInstructions = async (s) => {
+  const incId = assignments[s.id];
+  if (!incId) return;
 
+  const inc = incidents.find(i => i.id === incId);
+  if (!inc) return;
+
+  setLoading(p => ({ ...p, [s.id]: true }));
+
+  try {
+    const result = await getRoleInstructions(
+  s.role,
+  {
+    type: inc.type,
+    severity: inc.severity,
+    location: inc.location
+  }
+);
+
+setInstructions(p => ({
+  ...p,
+  [s.id]: result?.trim?.()
+    ? result
+    : "⚠️ No instructions returned from Gemini"
+}));
+
+  } catch (err) {
+    console.error("Gemini error:", err);
+    setInstructions(p => ({
+      ...p,
+      [s.id]: "⚠️ Failed to fetch instructions"
+    }));
+  }
+
+  setLoading(p => ({ ...p, [s.id]: false }));
+};
   return (
     <div style={{ padding: 24, maxWidth: 1100, margin: "0 auto" }}>
       <h1 style={{ fontSize: 20, fontWeight: 800, marginBottom: 4 }}>👥 Staff Dispatch</h1>

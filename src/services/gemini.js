@@ -4,16 +4,31 @@ import { GEMINI_KEY } from "./firebase";
 const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_KEY}`;
 
 async function callGemini(prompt) {
-  const res = await fetch(GEMINI_URL, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      contents: [{ parts: [{ text: prompt }] }],
-      generationConfig: { temperature: 0.3, maxOutputTokens: 1024 },
-    }),
-  });
-  const data = await res.json();
-  return data?.candidates?.[0]?.content?.parts?.[0]?.text || "";
+  try {
+    const res = await fetch(GEMINI_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: { temperature: 0.3, maxOutputTokens: 1024 },
+      }),
+    });
+
+    const data = await res.json();
+
+    console.log("Gemini RAW response:", data); // 👈 ADD THIS
+
+    if (!res.ok) {
+      throw new Error(data?.error?.message || "Gemini API failed");
+    }
+
+    return data?.candidates?.[0]?.content?.parts?.[0]?.text
+      || "⚠️ No response from Gemini";
+
+  } catch (err) {
+    console.error("Gemini ERROR:", err);
+    return "⚠️ Gemini not working (check API key / quota)";
+  }
 }
 
 // Triage an incoming SOS report → returns structured JSON
